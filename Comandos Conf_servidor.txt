@@ -1,0 +1,168 @@
+********************** CENTOS UPDATE *******************************************
+sudo yum update -y 
+sudo dnf update -y 
+sudo dnf install nano -y 
+
+
+********************** GIT *******************************************
+
+sudo dnf install git -y 
+git config --global user.name "Usuario"
+git config --global user.email "correo@example.com"
+
+
+********************** ADD USER *******************************************
+
+adduser developer 
+passwd developer 
+
+usermod -G wheel  developer 
+su -  developer 
+mkdir -p ~/.ssh 
+chmod 700 ~/.ssh 
+touch ~/.ssh/authorized_keys 
+cat ~/.ssh/authorized_keys 
+echo "Llave SSH de la computadora"> ~/.ssh/authorized_keys 
+chmod -R go= ~/.ssh 
+chown -R $user:$user ~/.ssh 
+sudo systemctl restart sshd 
+
+-> Cambiar puerto SSH y MySQL <-
+semanage port -a -t ssh_port_t -p tcp #PORTNUMBER
+semanage port -a -t mysqld_port_t -p tcp #PORTNUMBER
+
+
+**************************** Proyecto en raiz **********************************
+sudo chmod +x /home/$usuario
+sudo chmod +x /home/$usuario/proyecto/public/
+sudo chown -R :nginx /home/$usuario/proyecto/storage/
+sudo chown -R :nginx /home/$usuario/proyecto/bootstrap/cache/
+sudo chmod -R 775 /home/$usuario/proyecto/bootstrap/cache/
+sudo chmod -R 775 /home/$usuario/proyecto/storage/
+
+sudo semanage fcontext -a -t httpd_sys_rw_content_t '/home/$usuario/proyecto/storage(/.*)?'
+sudo semanage fcontext -a -t httpd_sys_rw_content_t '/home/$usuario/proyecto/bootstrap/cache(/.*)?'
+ restorecon -Rv '/home/ubameny/prueba'
+
+
+
+********************** FIREWALLD *******************************************
+
+sudo dnf install firewalld -y 
+sudo systemctl enable firewalld 
+sudo systemctl start firewalld 
+sudo firewall-cmd --state 
+
+sudo firewall-cmd --permanent --zone=public --remove-service=ssh 
+sudo firewall-cmd --permanent --zone=public --add-port=puertossh/tcp 
+sudo firewall-cmd --reload 
+sudo firewall-cmd --permanent --list-all 
+sudo systemctl restart firewalld 
+sudo nano /etc/ssh/sshd_config 
+______________________________________________________________________________
+-> Cambiar en sshd_config <-
+Port puerto
+AddressFamily inet
+
+LoginGraceTime 5m            
+PermitRootLogin no
+
+PubkeyAuthentication yes            
+PermitEmptyPasswords no
+
+PasswordAuthentication no
+                
+
+        
+
+*****************************************************************-<---<--<---
+sudo systemctl restart sshd 
+***********************************************************************
+
+
+
+
+********************** MSYQL *******************************************
+
+sudo dnf install mariadb-server -y 
+
+*************************************************************************
+sudo systemctl start mysqld 
+sudo systemctl enable mysqld 
+******************* Configuración adicional MySQL ************************
+
+sudo mysql_secure_installation 
+
+************************REMOTE CONNECTION*****************************************
+systemctl restart mysql 
+sudo firewall-cmd --permanent --zone=public --remove-service=mysql 
+sudo firewall-cmd --permanent --add-port=portMySQL/tcp 
+sudo firewall-cmd --reload 
+sudo firewall-cmd --permanent --list-all 
+sudo systemctl restart firewalld 
+
+
+********************** SSL_DB *******************************************
+mkdir /etc/my.cnf.d/certs 
+cd /etc/my.cnf.d/certs
+openssl genrsa 2048 > /etc/my.cnf.d/certs/ca-key.pem 	
+	openssl genrsa 2048 > /root/certificados/ca-key.pem 
+openssl req -new -x509 -nodes -days 9999 -key /root/certificados/ca-key.pem > /root/certificados/ca-cert.pem  
+openssl req -newkey rsa:2048 -days 1000 -nodes -keyout /root/certificados/server-key.pem > /root/certificados/server-req.pem 
+openssl x509 -req -in /root/certificados/server-req.pem -days 3600 -CA /root/certificados/ca-cert.pem -CAkey /root/certificados/ca-key.pem -set_serial 01 -out /root/certificados/server-cert.pem 
+
+
+
+********************** SSL_DB CLIENTE *******************************************
+openssl req -newkey rsa:2048 -days 3600 -nodes -keyout /etc/my.cnf.d/certs/client-key.pem -out /etc/my.cnf.d/certs/client-req.pem 
+openssl rsa -in /etc/my.cnf.d/certs/client-key.pem -out /etc/my.cnf.d/certs/client-key.pem 
+openssl x509 -req -in /etc/my.cnf.d/certs/client-req.pem -days 3600 -CA /etc/my.cnf.d/certs/ca-cert.pem -CAkey /etc/my.cnf.d/certs/ca-key.pem -set_serial 01 -out /etc/my.cnf.d/certs/client-cert.pem 
+
+******************** MACHINE LOCAL  **********************************
+mkdir /etc/my.cnf.d/certs
+
+sudo chown -Rv mysql:root /etc/my.cnf.d/certs
+openssl verify -CAfile /etc/my.cnf.d/certs/ca-cert.pem /etc/my.cnf.d/certs/server-cert.pem /etc/my.cnf.d/certs/client-cert.pem
+sudo -u mysql cat /etc/my.cnf.d/certs/ca-cert.pem 
+sudo -u mysql cat /etc/my.cnf.d/certs/client-cert.pem 
+sudo -u mysql cat /etc/my.cnf.d/certs/client-key.pem 
+sudo mkdir -p /home/developer/mysql/certs
+cp  /etc/my.cnf.d/certs/* /home/developer/mysql/certs
+sudo chown -Rv developer:developer /home/developer/mysql
+sudo nano /etc/my.cnf.d/ssl.cnf  
+
+*****************************************************************************************
+[mysqld]
+ssl-ca      =   /etc/my.cnf.d/certs/ca-cert.pem
+ssl-cert    =   /etc/my.cnf.d/certs/server-cert.pem
+ssl-key     =   /etc/my.cnf.d/certs/server-key.pem 
+ssl         =   on
+
+
+        
+
+[client]
+#ssl-ca      =   /etc/my.cnf.d/certs/ca-cert.pem
+ssl-cert    =   /etc/my.cnf.d/certs/client-cert.pem
+ssl-key     =   /etc/my.cnf.d/certs/client-key.pem 
+*****************************************************************************************
+        
+
+
+systemctl restart mysql 
+
+
+scp -P 35231 -i /Users/MacDOT/Dropbox/DocumentosPersonales/DigitalOcean/ServidorPruebas/Configuraciones/_Production/mydb.mipruebas.xyz/keys/Developer.pem  developer@157.230.93.206:/home/developer/mysql/certs/client-*  /Users/MacDOT/mysql/certs/
+
+scp -P 35231 -i /Users/MacDOT/Dropbox/DocumentosPersonales/DigitalOcean/ServidorPruebas/Configuraciones/_Production/mydb.mipruebas.xyz/keys/Developer.pem developer@157.230.93.206:/home/developer/mysql/certs/ca-cert.pem  /Users/MacDOT/mysql/certs/
+
+
+mysql -u testssl -h 157.230.93.206 -P 3306  -pDSOd5PUNaXQ2hWqbgxkA --ssl-ca=/Users/MacDOT/mysql/certs/ca-cert.pem 
+
+
+
+
+********************** Backup Mysql *******************************************
+mysql -u testssl -h 157.230.93.206 -P 3306  -pDSOd5PUNaXQ2hWqbgxkA --ssl-ca=/Users/MacDOT/mysql/certs/ca-cert.pem 
+mysqldump -u testssl -h 157.230.93.206 -P 3306  -pDSOd5PUNaXQ2hWqbgxkA --ssl-ca=/Users/MacDOT/mysql/certs/ca-cert.pem  sample> backupRemoto.sql
+
